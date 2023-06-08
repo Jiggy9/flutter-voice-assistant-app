@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'secrets.dart';
 
 class OpenAIService {
+  final List<Map<String, String>> messages = [];
+
   Future<String> isArtPromtAPI(String prompt) async {
     try {
       final res = await http.post(
@@ -26,19 +28,94 @@ class OpenAIService {
       );
       print(res.body);
       if (res.statusCode == 200) {
-        print('yay');
+        String content =
+            jsonDecode(res.body)['choice'][0]['message']['content'];
+        content = content.trim();
+
+        switch (content) {
+          case 'Yes':
+          case 'yes':
+          case 'Yes.':
+          case 'yes.':
+            final res = await dallEAPI(prompt);
+            return res;
+          default:
+            final res = await chatGPTAPI(prompt);
+            return res;
+        }
       }
-      return 'AI';
+      return 'An internal error occured';
     } catch (e) {
       return e.toString();
     }
   }
 
   Future<String> chatGPTAPI(String prompt) async {
-    return 'CHATGPT';
+    messages.add({
+      'role': 'user',
+      'content': prompt,
+    });
+    try {
+      final res = await http.post(
+        Uri.parse('https://api.openai.com/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $openAIAPIKey',
+        },
+        body: jsonEncode({
+          "model": "gpt-3.5-turbo",
+          "messages": messages,
+        }),
+      );
+
+      if (res.statusCode == 200) {
+        String content =
+            jsonDecode(res.body)['choice'][0]['message']['content'];
+        content = content.trim();
+
+        messages.add({
+          'role': 'assistant',
+          'content': content,
+        });
+        return content;
+      }
+      return 'An internal error occured';
+    } catch (e) {
+      return e.toString();
+    }
   }
 
   Future<String> dallEAPI(String prompt) async {
-    return 'DALL-E';
+    messages.add({
+      'role': 'user',
+      'content': prompt,
+    });
+    try {
+      final res = await http.post(
+        Uri.parse('https://api.openai.com/v1/images/generations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $openAIAPIKey',
+        },
+        body: jsonEncode({
+          'prompt': prompt,
+          'n': 1,
+        }),
+      );
+
+      if (res.statusCode == 200) {
+        String imageUrl = jsonDecode(res.body)['data'][0]['url'];
+        imageUrl = imageUrl.trim();
+
+        messages.add({
+          'role': 'assistant',
+          'content': imageUrl,
+        });
+        return imageUrl;
+      }
+      return 'An internal error occured';
+    } catch (e) {
+      return e.toString();
+    }
   }
 }
